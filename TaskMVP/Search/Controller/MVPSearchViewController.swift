@@ -34,7 +34,10 @@ final class MVPSearchViewController: UIViewController {
     }
   }
 
-  private var items: [GithubModel] = []
+  private var presenter: MVPSearchPresenterInput!
+  func inject(presenter: MVPSearchPresenterInput) {
+    self.presenter = presenter
+  }
 
   override func viewDidLoad() {
     super.viewDidLoad()
@@ -43,21 +46,33 @@ final class MVPSearchViewController: UIViewController {
   }
 
   @objc func tapSearchButton(_sender: UIResponder) {
-    guard let searchWord = searchTextField.text, !searchWord.isEmpty else { return }
-    indicator.isHidden = false
-    tableView.isHidden = true
-    GithubAPI.shared.get(searchWord: searchWord) { result in
-      DispatchQueue.main.async {
-        self.indicator.isHidden = true
-        self.tableView.isHidden = false
-        switch result {
-        case .failure(let error):
-          print(error)
-        case .success(let items):
-          self.items = items
-          self.tableView.reloadData()
-        }
-      }
+    self.presenter.searchText(searchTextField.text)
+  }
+}
+
+extension MVPSearchViewController: MVPSearchPresenterOutput {
+  func update(loading: Bool) {
+    DispatchQueue.main.async {
+      self.tableView.isHidden = loading
+      self.indicator.isHidden = !loading
+    }
+  }
+
+  func update(githubModels: [GithubModel]) {
+    DispatchQueue.main.async {
+      self.tableView.reloadData()
+    }
+  }
+
+  func get(error: Error) {
+    DispatchQueue.main.async {
+      print(error.localizedDescription)
+    }
+  }
+
+  func showWeb(githubModel: GithubModel) {
+    DispatchQueue.main.async {
+      Router.shared.showWeb(from: self, githubModel: githubModel)
     }
   }
 }
@@ -65,20 +80,20 @@ final class MVPSearchViewController: UIViewController {
 extension MVPSearchViewController: UITableViewDelegate {
   func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
     tableView.deselectRow(at: indexPath, animated: true)
-    Router.shared.showWeb(from: self, githubModel: items[indexPath.item])
+    presenter.didSelect(index: indexPath.row)
   }
 }
 
 extension MVPSearchViewController: UITableViewDataSource {
   func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-    items.count
+    presenter.numberOfItems
   }
 
   func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
     guard let cell = tableView.dequeueReusableCell(withIdentifier: MVPTableViewCell.className) as? MVPTableViewCell else {
       fatalError()
     }
-    let githubModel = items[indexPath.item]
+    let githubModel = presenter.item(index: indexPath.row)
     cell.configure(githubModel: githubModel)
     return cell
   }
